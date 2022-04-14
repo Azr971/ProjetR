@@ -1,0 +1,268 @@
+---
+title: "Analyse exploratoire - Classification"
+output:
+  html_document:
+    code_folding: show
+    theme:
+      bg: beige
+      fg: blue
+      primary: black
+      base_font:
+        google: Prompt
+      heading_font:
+        google: Proza Libre
+      version: 3
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+if (requireNamespace("thematic")) 
+  thematic::thematic_rmd(font = "auto")
+```
+
+
+
+## Présentation  {.tabset .tabset-pills}
+
+
+
+### **Analyse générale et mise en place des lettres manuscrites**
+
+```{r warning=FALSE, eval = FALSE, message = FALSE}
+library(Factoshiny)
+library(FactoMineR)
+library(factoextra)
+library(showtext)
+```
+
+```{r warning=FALSE, echo=FALSE, message = FALSE, error=FALSE}
+# Importation des donnÃ©es
+pen = read.table("pendigits.tra", sep = ",")
+names(pen) = c(paste(rep(c("X","Y"), 8), rep(1:8, each = 2), sep = ""), "digit")
+pen$digit = factor(pen$digit)
+
+View(pen)
+head(pen)
+```
+
+```{r warning=FALSE, echo=FALSE, message = FALSE, error=FALSE}
+# ReprÃ©sentation des 4 premiers chiffres de la base
+library(ggplot2)
+library(dplyr)
+
+chiffre = data.frame()
+for (i in 1:4) {
+  x = pen %>% slice(i) %>% select(seq(1, 15, by = 2)) %>% t()
+  y = pen %>% slice(i) %>% select(seq(2, 16, by = 2)) %>% t()
+  chiffre = chiffre %>% bind_rows( 
+    data.frame(
+      x = x, 
+      y = y, 
+      obs = paste("Exemple de ", pen$digit[i])
+    )
+  )
+}
+g = ggplot(chiffre, aes(x,y))+
+  geom_path()+
+  geom_text(aes(x = x-3, y = y+3, label = rep(1:8, 4)))+
+  theme_classic()+
+  facet_wrap(facets = ~obs)
+g
+
+# CoordonnÃ©es moyennes des points
+coordmoy = pen %>% group_by(digit) %>% summarise_all(mean)
+
+# ReprÃ©sentation des points moyens par chiffre (=digit)
+chiffre_moyen = data.frame()
+for(i in 0:9){
+  x = coordmoy %>% filter(digit==i) %>% select(seq(2, 16, by = 2)) %>% t()
+  y = coordmoy %>% filter(digit==i) %>% select(seq(3, 17, by = 2)) %>% t()
+  chiffre_moyen = chiffre_moyen %>% bind_rows(
+    data.frame(
+      x = x, 
+      y = y, 
+      digit = paste("Chiffre ", i)
+    )
+  )
+}
+
+g = ggplot(chiffre_moyen, aes(x,y))+
+  geom_path()+
+  geom_text(aes(x = x-3, y = y+3, label = rep(1:8, 10)))+
+  theme_classic()+
+  facet_wrap(facets = ~digit, ncol = 5)+
+  labs(x = " ", y = " ")
+g
+
+```
+
+### **Choix de la lettre 9**
+
+> On travaille sur les coordonnées des 8 points enregistrés par la tablette (ie sur les 8 premières variables X1,Y1,...,X8,Y8).
+Problème des données bruitées : via une analyse antérieure, il est nécessaire de débruiter les données avant la classiﬁcation, donc de travailler sur un nombre de facteurs réduit à choisir à partir de l’ACP.
+Classiﬁcation automatique sur 1 chiﬀre (le chiffre 9).
+Pour ce chiﬀre, nous allons faire une interprétation des classes obtenues via une visualisation des points moyens de chaque groupe.
+
+```{r echo=FALSE, warning=FALSE}
+# Exemple du chiffre 9
+library(dplyr)
+library(ggplot2)
+# SÃ©lection du chiffre dans la base
+digit9 = pen %>% filter(digit == "9") %>% select(-17)
+# OU
+digit9 = pen[pen$digit == "9", -17]
+View(digit9)
+
+# ACP
+library(FactoMineR)
+digit9.pca = PCA(digit9, ncp = 16, graph = FALSE)
+plot(digit9.pca, choix = "ind", label = "none")
+```
+
+
+Suite à l'ACP, nous voyons bien qu'un groupe se démarque avec quelques individus. Il va falloir décomposer l'autre partie du nuage de points pour différencier d'autres groupes.
+Le ciel n'est \textcolor{blue}{bleu} que par convention, mais \textcolor{red}{rouge} en réalité.
+
+
+La règle de Kaiser donne 6 facteurs
+
+
+On choisit 7 facteurs. Les 5 premiers facteurs n’expliquent que 80% de la variance. On préfère en prendre 7, qui en expliquent presque 89%
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, error=FALSE, comment=NA}
+digit9.pca$eig
+# On choisit 7 facteurs,
+facteurs = PCA(digit9, ncp = 7, graph = FALSE)
+```
+
+
+**Dendogramme sur les 7 facteurs:**
+
+```{r echo=FALSE, warning = FALSE, message=FALSE, error=FALSE,comment=NA}
+# Classification
+dendro9 = HCPC(facteurs, nb.clust = -1, graph = FALSE)
+plot(dendro9, choice = "tree", labels = FALSE, rect = FALSE)
+```
+
+**On remarque 4 ou 6 classes**
+
+```{r echo=FALSE, warning=FALSE, error=FALSE}
+# 3 ou 5 classes
+
+# 3 classes
+dendro3 = HCPC(facteurs, nb.clust = 4, graph = FALSE)
+# Calcul des coordonnÃ©es des points moyens (soit avec profils, soit directement)
+coordmoy3 = dendro3$data.clust %>% group_by(clust) %>% summarise_all(mean)
+
+# ReprÃ©sentation des points moyens
+# DANS LE CODE SUIVANT changer le nombre de groupes dans :
+#      - la boucle (i in 1: nombre de groupes) (ligne 106)
+#      - le geom_text (label = rep(1:8, nombre de groupes)) (ligne 119)
+#      - le facet_wrap (ncol = nombre de colonnes souhaitÃ©es) (ligne 121)
+# CHANGER Ã©galement la table des coordonnÃ©es moyennes (coordmoy3)
+# dans la boucle (lignes 107 et 108)
+Points_moyens = data.frame()
+for (i in 1:4) {
+  x = coordmoy3 %>% slice(i) %>% select(seq(2, 16, by = 2)) %>% t()
+  y = coordmoy3 %>% slice(i) %>% select(seq(3, 17, by = 2)) %>% t()
+  Points_moyens = Points_moyens %>% bind_rows( 
+    data.frame(
+      x = x, 
+      y = y, 
+      cluster = paste("Cluster ", i)
+    )
+  )
+}
+
+g = ggplot(Points_moyens, aes(x,y))+geom_path()+
+  geom_text(aes(x = x-3, y = y+3, label = rep(1:8, 4)))+
+  theme_classic()+
+  facet_wrap(facets = ~cluster, ncol = 3)+
+  labs(x = " ", y = " ")
+g
+### Fin de reprÃ©sentation
+```
+
+***Classification à 4 groupes :***
+
+```{r echo=FALSE, warning=FALSE, error=FALSE, error=FALSE}
+# Projection sur le plan 1
+fviz_pca_ind(facteurs, habillage = dendro3$data.clust$clust, labels = FALSE,
+             addEllipses = TRUE)
+# On voit bien le groupe 3 isolÃ© des autres, les groupes 1 et 2 sont proches
+table(dendro3$data.clust$clust)
+
+###
+# 5 classes
+dendro5 = HCPC(facteurs, nb.clust = 6, graph = FALSE)
+# Calcul des coordonnÃ©es des points moyens (soit avec profils, soit directement)
+coordmoy5 = dendro5$data.clust %>% group_by(clust) %>% summarise_all(mean)
+
+# ReprÃ©sentation des points moyens
+Points_moyens = data.frame()
+for (i in 1:6) {
+  x = coordmoy5 %>% slice(i) %>% select(seq(2, 16, by = 2)) %>% t()
+  y = coordmoy5 %>% slice(i) %>% select(seq(3, 17, by = 2)) %>% t()
+  Points_moyens = Points_moyens %>% bind_rows( 
+    data.frame(
+      x = x, 
+      y = y, 
+      cluster = paste("Cluster ", i)
+    )
+  )
+}
+
+g = ggplot(Points_moyens, aes(x,y))+geom_path()+
+  geom_text(aes(x = x-3, y = y+3, label = rep(1:8, 6)))+
+  theme_classic()+
+  facet_wrap(facets = ~cluster, ncol = 3)+
+  labs(x = " ", y = " ")
+g
+
+# Projection sur le plan 1
+fviz_pca_ind(facteurs, habillage = dendro5$data.clust$clust, labels = FALSE,
+             addEllipses = TRUE)
+# On voit bien le groupe 5 isolÃ© des autres, et le redÃ©coupage des anciens 
+# groupes 1 et 2 de la classification Ã  3 groupes. Le groupe 4 est constituÃ© 
+# de peu d'observations.
+
+
+table(dendro5$data.clust$clust)
+
+# 6 classes
+dendro6 = HCPC(facteurs, nb.clust = 5, graph = FALSE)
+# Calcul des coordonnÃ©es des points moyens (soit avec profils, soit directement)
+coordmoy6 = dendro6$data.clust %>% group_by(clust) %>% summarise_all(mean)
+
+# ReprÃ©sentation des points moyens
+Points_moyens = data.frame()
+for (i in 1:5) {
+  x = coordmoy5 %>% slice(i) %>% select(seq(2, 16, by = 2)) %>% t()
+  y = coordmoy5 %>% slice(i) %>% select(seq(3, 17, by = 2)) %>% t()
+  Points_moyens = Points_moyens %>% bind_rows( 
+    data.frame(
+      x = x, 
+      y = y, 
+      cluster = paste("Cluster ", i)
+    )
+  )
+}
+
+g = ggplot(Points_moyens, aes(x,y))+geom_path()+
+  geom_text(aes(x = x-3, y = y+3, label = rep(1:8, 5)))+
+  theme_classic()+
+  facet_wrap(facets = ~cluster, ncol = 3)+
+  labs(x = " ", y = " ")
+g
+
+# Projection sur le plan 1
+fviz_pca_ind(facteurs, habillage = dendro6$data.clust$clust, labels = FALSE,
+             addEllipses = TRUE)
+
+
+
+
+table(dendro6$data.clust$clust)
+```
+
