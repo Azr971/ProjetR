@@ -1,0 +1,191 @@
+---
+title: "Texas Housing Sales"
+output: 
+  html_document:
+params:
+  spotlight: "Houston"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE, results='asis')
+
+# this is an R option that controls the number of digits printed
+options(digits=4)
+
+# for dataset
+library(dplyr)
+# for graphing functions
+library(ggplot2)
+# for pretty regression tables
+library(broom)
+
+# graphical parameters
+theme_set(theme_bw())
+# Using 2 colors from ColorBrewer scle RdBu
+palette <- c("#ef8a62", "#67a9cf")
+```
+
+# Background
+
+
+
+## Purpose
+
+This is a study of housing sales in Texas cities, with a spotlight on the city of `r params$spotlight`.  We will have graphs of time trends and run a linear regression model.
+
+
+
+## Quick look at the dataset
+
+Dataset from `ggplot2` package
+
+**Variables:**
+
+* **city:** Name of MLS area
+* **year, month, date:** year and month, and date expressed as continuous year variable
+* **sales:** Number of sales
+* **volume:** Total value of sales
+* **median:** Median sale price
+* **listings:** Total active listings
+* **inventory:** "Months inventory", amount of time it would take to sell all current listings at current pace of sales
+
+Here are the first 20 rows of the spotlight city:
+
+```{r dataset}
+spotcity <- subset(txhousing, txhousing$city==params$spotlight)
+knitr::kable(head(spotcity, n=20), align='c')
+
+txhousing$month <- factor(txhousing$month, labels=c("Jan", "Feb", "Mar",
+                                                    "Apr", "May", "Jun",
+                                                    "Jul", "Aug", "Sep",
+                                                    "Oct", "Nov", "Dec"))
+```
+
+
+# Plots
+
+## Time series of Sales By City, Spotlight on `r params$spotlight`
+
+Sales appear to be rising through 2006, then slow until 2010, and then rise again.
+
+```{r, results='hold'}
+ggplot(txhousing, aes(x=date, y=sales, group=city)) +
+  geom_line(color=palette[2], alpha=.5) +
+  geom_line(data=spotcity, color=palette[1]) 
+
+
+```
+
+## Seasonal trends
+
+We detect seasonal trends in the time series plot, so let's aggregate across months (by city), to examine sales by month.
+
+```{r seasonal_data, include=FALSE}
+# aggregate data by city and month
+by_month <- group_by(txhousing, city, month) %>% 
+  summarise(sales=mean(sales), volume=mean(volume),
+            median=mean(median), listings=mean(listings),
+            inventory=mean(inventory))
+
+```
+
+```{r seasonal-plots}
+ggplot(by_month, aes(x=month, y=sales, group=city)) + 
+  geom_line(color=palette[2], alpha=.5) +
+  geom_line(data=filter(by_month, city==params$spotlight), color=palette[1]) 
+  
+```
+
+
+## Removing city effects from seasonal effects
+
+Large differences in the scale of sales make the seasonal effects difficult to see in some plots.  Let's remove the city effect from the monthly aggregates by dividing sales by the mean of sales for that city.
+
+Then, we replot the mean of the rescaled sales by month and city.
+
+```{r de-city the seasonal plots}
+by_month$mean_city_sales <- rep(tapply(by_month$sales, INDEX=by_month$city, mean, na.rm=TRUE), each=12)
+by_month$dsales <- by_month$sales/by_month$mean_city_sales
+
+ggplot(by_month, aes(x=month, y=dsales, group=city)) + 
+  geom_line(color=palette[2], alpha=.5) +
+  geom_line(data=filter(by_month, city==params$spotlight), color=palette[1]) 
+```
+
+# Statistical Model
+
+## Regression models
+
+Sales is very skewed so transforming to log for linear regression 
+
+```{r, fig.show='hold', out.width='50%'}
+txhousing$logsales <- log(txhousing$sales)
+# layout(matrix(c(1,2), nrow=1))
+# hist(txhousing$sales)
+# hist(txhousing$logsales)
+# layout(1)
+ggplot(txhousing, aes(x=sales)) + geom_histogram(fill=palette[2])
+ggplot(txhousing, aes(x=logsales)) + geom_histogram(fill=palette[2])
+```
+
+## Model
+
+Model is $log(sales) = city + year + month + median + \epsilon$, where $city$ and $month$ are factors and $year$ and $median$ are continuous predictors.
+
+Here are the coefficients, not including the city effects (too many):
+
+```{r linear model}
+
+m <- lm(logsales ~ city + I(year-2000) + month + median , data=txhousing)
+
+mycoefs <- tidy(m, conf.int=TRUE)
+mycoefs$term[mycoefs$term==("I(year - 2000)")] <- "year"
+
+coefs_small <- filter(mycoefs, !grepl("city", term))
+
+knitr::kable(coefs_small)
+
+```
+
+
+## Diagnostic plots
+
+### Residuals vs. fitted
+
+Linearity assumption seems to be ok, but maybe not homoskedasticity assumption.
+ 
+```{r data and rvf}
+# use broom::augment() to make a dataset of regression diagnostics
+diagnostics <- augment(m)
+# add the city variable so we can spotlight
+diagnostics$city <- txhousing$city[as.numeric(diagnostics$`.rownames`)]
+
+# residuals vs fitted plot
+ggplot(diagnostics, aes(x=.fitted, y=.std.resid)) + 
+  geom_point(color=palette[2], alpha=.5) +
+  geom_smooth(color="black")+
+  geom_point(data=subset(diagnostics, diagnostics$city==params$spotlight), color=palette[1])
+```
+
+
+### q-q plot of residuals
+
+Some departures from normality in tails, but we have a very large sample size, so maybe not a big deal.
+
+```{r qq-plot}
+ggplot(diagnostics, aes(sample=.std.resid)) + 
+  geom_qq(alpha=.25) + 
+  geom_qq_line() 
+```
+
+
+### Influence plot
+
+Residuals vs leverage, sized by Cook's distance. 
+
+```{r influence plot}
+ggplot(diagnostics, aes(x=.hat, y=.std.resid, size=.cooksd)) + 
+  geom_point(color=palette[2], alpha=.5) + 
+  geom_point(data=subset(diagnostics, diagnostics$city==params$spotlight), color=palette[1])
+
+```
