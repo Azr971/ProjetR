@@ -1,6 +1,6 @@
 
 fluidPage(
-  tags$h1("Les naissances en france"),
+  tags$h1("Les naissances en France"),
   navlistPanel(
     widths = c(3,9),
     

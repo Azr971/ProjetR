@@ -2,6 +2,7 @@
 library(shiny)
 library(apexcharter)
 library(shinyWidgets)
+library(dplyr)
 #data
 
 naissance_france <- readRDS(file = "datas/naissances_france.rds")
