@@ -6,6 +6,7 @@ library(dplyr)
 library(shinythemes)
 library(leaflet)
 library(sf)
+library(reactable)
 #data
 
 naissance_france <- readRDS(file = "datas/naissances_france.rds")

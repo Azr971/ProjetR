@@ -124,7 +124,7 @@ fluidPage(
     
     tabPanel(
       title = "Données",
-      "et le tableau de données"
+      reactableOutput("tableau")
     )
   )
 )

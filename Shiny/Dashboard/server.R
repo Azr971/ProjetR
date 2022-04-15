@@ -135,11 +135,11 @@ function(input, output, session){
     } else {
       contour <- contour_departements
     }
-     if (input$variable == "Nombre de naissances") {
+     if (input$variable == "Nombres de naissances") {
        palette <- "Purples"
       valeurs <- contour %>% 
         pull(NBRE_NAISSANCES)
-     } else if (input$variable == "taux de natalité"){
+     } else if (input$variable == "Taux de natalité"){
        palette <- "Reds"
        valeurs <- contour %>% 
          pull(TAUX_NATALITE)
@@ -167,4 +167,9 @@ function(input, output, session){
     )
     )
       })
+  
+  output$tableau <- renderReactable({
+    reactable(data = Naissance_r())
+  })
+  
   }
